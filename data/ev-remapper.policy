@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+"http://www.freedesktop.org/standards/PolicyKit/1.0/policyconfig.dtd">
+
+<policyconfig>
+  <vendor>ev-remapper</vendor>
+  <vendor-url>https://github.com/Kevnnm/ev-remapperev-remapper</vendor-url>
+  <action id="ev-remapper">
+    <description>Run ev-remapper as root</description>
+    <message>Authentication is required for device discovery.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>auth_admin_keep</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/ev-remapper-control</annotate>
+  </action>
+</policyconfig>

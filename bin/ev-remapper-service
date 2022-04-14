@@ -1,0 +1,17 @@
+#!/usr/bin/python3
+
+from evremapper.logger import add_loghandler, logger_verbosity
+
+
+def main():
+    logger_verbosity(debug=True)
+    add_loghandler()
+
+    from evremapper.daemon import Daemon
+    daemon = Daemon()
+    daemon.publish()
+    daemon.run()
+
+
+if __name__ == '__main__':
+    main()

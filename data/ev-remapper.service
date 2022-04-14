@@ -1,0 +1,13 @@
+[Unit]
+Description=Service to remap input event codes
+Requires=dbus.service
+After=dbus.service
+
+[Service]
+Type=dbus
+BusName=evremapper.Manager
+ExecStart=/usr/bin/ev-remapper-service
+
+[Install]
+WantedBy=default.target
+Alias=ev-remapper.service
