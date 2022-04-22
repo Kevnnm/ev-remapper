@@ -2,8 +2,12 @@
 
 from pydbus import SystemBus
 from evremapper.logger import logger
+from evremapper.devices import _DeviceDetection, DeviceGroupEncoder
 
+import time
 import sys
+import json
+from multiprocessing import Pipe
 
 import gi
 gi.require_version("GLib", "2.0")
@@ -22,6 +26,8 @@ class Daemon:
                         <arg type='s' name='out' direction='in'/>
                         <arg type='s' name='response' direction='out'/>
                     </method>
+                    <method name='refresh'>
+                    </method>
                 </interface>
             </node>
         """
@@ -29,6 +35,8 @@ class Daemon:
     def __init__(self):
         # TODO Initialize structures here
         logger.debug("Creating daemon")
+
+        self.refreshed_devices_at = 0
 
     def run(self):
         logger.debug("Starting daemon")
@@ -46,3 +54,18 @@ class Daemon:
     def hello(self, out):
         logger.info('Received "%s" in hello', out)
         return out
+
+    def refresh(self):
+        now = time.time()
+        if now - 10 > self.refreshed_devices_at:
+            logger.debug("Refreshing device list due to time since last refresh")
+            time.sleep(0.1)
+            # groups.refresh()
+            (r, w) = Pipe()
+            _DeviceDetection(w).start()
+
+            result = r.recv()
+            logger.debug("finished refreshing")
+            logger.debug(DeviceGroupEncoder().encode(result))
+            self.refreshed_devices_at = now
+            return
