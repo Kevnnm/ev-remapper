@@ -79,8 +79,7 @@ class Injector(multiprocessing.Process):
         logger.debug('sources "%s"', sources)
 
         for source in sources:
-            # ungrab at the end to make the next injection process not fail
-            # its grabs
+            # ungrab at the end to make the next injection process not fail its grabs
             try:
                 source.ungrab()
             except (OSError, IOError) as error:
