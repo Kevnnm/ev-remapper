@@ -28,8 +28,6 @@ class Daemon:
                         <arg type='s' name='out' direction='in'/>
                         <arg type='s' name='response' direction='out'/>
                     </method>
-                    <method name='refresh'>
-                    </method>
                     <method name='inject_device'>
                         <arg type='s' name='device_key' direction='in'/>
                         <arg type='s' name='config' direction='in'/>
@@ -63,21 +61,31 @@ class Daemon:
         logger.info('Received "%s" in hello', out)
         return out
 
-    def refresh(self):
+    def refresh(self, group_key=""):
         now = time.time()
         if now - 10 > self.refreshed_devices_at:
             logger.debug("Refreshing device list due to time since last refresh")
             time.sleep(0.1)
             DevGroups.refresh()
 
-            logger.debug("finished refreshing")
-            logger.debug("%s", [group.key for group in DevGroups])
+            logger.debug("Finished refreshing")
+            logger.debug("Available device groups: %s", [group.key for group in DevGroups])
             self.refreshed_devices_at = now
             return
 
+        if not DevGroups.find(key=group_key):
+            logger.debug("Refreshing device list due to missing device")
+            time.sleep(0.1)
+            DevGroups.refresh()
+
+            logger.debug("finished refreshing")
+            logger.debug("%s", [group.key for group in DevGroups])
+            self.refreshed_devices_at = now
+
     def inject_device(self, device_key, config):
-        # TODO: Get rid of refresh dbus method and refresh when we cannot find the device to inject
         logger.info('request to inject device "%s"', device_key)
+        self.refresh(device_key)
+
         inject_group = DevGroups.find(key=device_key)
 
         config = Config.from_string(config)
