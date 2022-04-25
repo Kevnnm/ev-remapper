@@ -4,7 +4,7 @@
 
 <policyconfig>
   <vendor>ev-remapper</vendor>
-  <vendor-url>https://github.com/Kevnnm/ev-remapperev-remapper</vendor-url>
+  <vendor-url>https://github.com/Kevnnm/ev-remapper</vendor-url>
   <action id="ev-remapper">
     <description>Run ev-remapper as root</description>
     <message>Authentication is required for device discovery.</message>

@@ -164,3 +164,29 @@ class _DeviceDetection(threading.Thread):
             result.append(group)
 
         self.pipe.send(result)
+
+
+class _DeviceGroups:
+    def __init__(self):
+        self._groups: List[_DeviceGroup] = None
+
+    def __iter__(self):
+        return iter(self._groups)
+
+    def refresh(self):
+        # groups.refresh()
+        (r, w) = multiprocessing.Pipe()
+        _DeviceDetection(w).start()
+
+        result = r.recv()
+        self._groups = result
+
+    def find(self, key=None):
+        if key is not None:
+            for group in self._groups:
+                if group.key == key:
+                    return group
+
+
+# Global instance for holding all device information
+DevGroups = _DeviceGroups()
