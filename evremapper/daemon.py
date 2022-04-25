@@ -28,6 +28,9 @@ class Daemon:
                         <arg type='s' name='out' direction='in'/>
                         <arg type='s' name='response' direction='out'/>
                     </method>
+                    <method name='stop_inject_device'>
+                        <arg type='s' name='device_key' direction='in'/>
+                    </method>
                     <method name='inject_device'>
                         <arg type='s' name='device_key' direction='in'/>
                         <arg type='s' name='config' direction='in'/>
@@ -41,7 +44,7 @@ class Daemon:
         # TODO Initialize structures here
         logger.debug("Creating daemon")
 
-        self.injectors = []
+        self.injectors = {}
         self.refreshed_devices_at = 0
 
     def run(self):
@@ -82,6 +85,13 @@ class Daemon:
             logger.debug("%s", [group.key for group in DevGroups])
             self.refreshed_devices_at = now
 
+    def stop_inject_device(self, device_key):
+        if self.injectors.get(device_key) is None:
+            logger.warning('request to stop injecting for "%s" but none is running', device_key)
+            return
+
+        self.injectors[device_key].stop_injecting()
+
     def inject_device(self, device_key, config):
         logger.info('request to inject device "%s"', device_key)
         self.refresh(device_key)
@@ -92,7 +102,7 @@ class Daemon:
         logger.debug("config to inject: %s", config)
 
         injector = Injector(inject_group, config)
-        self.injectors.append(injector)
         injector.start()
+        self.injectors[inject_group.key] = injector
 
         return True

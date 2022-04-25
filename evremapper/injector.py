@@ -3,10 +3,15 @@
 import time
 import multiprocessing
 import evdev
+import asyncio
 
 from evremapper.devices import _DeviceGroup
 from evremapper.logger import logger
 from evremapper.config import InputEvent
+
+
+# Messages
+CLOSE = 0
 
 
 def is_in_capabilities(event: InputEvent, capabilites_dict):
@@ -17,9 +22,14 @@ def is_in_capabilities(event: InputEvent, capabilites_dict):
 
 
 class Injector(multiprocessing.Process):
-    def __init__(self, group: _DeviceGroup, config) -> None:
+    def __init__(self,
+                 group: _DeviceGroup,
+                 config) -> None:
+        # TODO: create a state field that will tell us the status of the process
         self.group = group
         self.config = config
+
+        self._msg_pipe = multiprocessing.Pipe()
 
         super().__init__(name=group)
 
@@ -73,11 +83,51 @@ class Injector(multiprocessing.Process):
 
         return dev
 
+    async def _msg_listener(self):
+        """Wait for messages from main process and process them"""
+        loop = asyncio.get_event_loop()
+        while True:
+            read_ready = asyncio.Event()
+            loop.add_reader(self._msg_pipe[0].fileno(), read_ready.set)
+            await read_ready.wait()
+            read_ready.clear()
+
+            msg = self._msg_pipe[0].recv()
+            if msg == CLOSE:
+                logger.debug('received close signal at injector "%s"', self.group.key)
+                loop.stop()
+                return
+
+    def stop_injecting(self):
+        logger.info('Stopping injector for group "%s"', self.group.key)
+        self._msg_pipe[1].send(CLOSE)
+
     def run(self):
+        logger.info('Starting injecting the for device "%s"', self.group.key)
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
         sources = self._grab_devices()
 
         logger.debug('sources "%s"', sources)
 
+        # Eventually will hold all couroutines to read and write input for each input device in group
+        couroutines = []
+
+        couroutines.append(self._msg_listener())
+
+        # try-except block for cleanly catching asyncio cancellation
+        try:
+            loop.run_until_complete(asyncio.gather(*couroutines))
+        except RuntimeError as error:
+            # loop stops via `CLOSE` msg which causes this error msg.
+            if str(error) != "Event loop stopped before Future completed.":
+                raise error
+        except OSError as e:
+            logger.error("Failed to run injector coroutines: %s", str(e))
+
+        logger.info('Ungrabbing all input devices for device group "%s"', self.group.key)
         for source in sources:
             # ungrab at the end to make the next injection process not fail its grabs
             try:
