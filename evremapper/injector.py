@@ -13,6 +13,14 @@ from evremapper.config import InputEvent
 # Messages
 CLOSE = 0
 
+# States
+UNKNOWN = -1
+STARTING = 2
+FAILED = 3
+RUNNING = 4
+STOPPED = 5
+NO_DEVICES = 6
+
 
 def is_in_capabilities(event: InputEvent, capabilites_dict):
     if event.code in capabilites_dict.get(event.type, []):
@@ -26,12 +34,42 @@ class Injector(multiprocessing.Process):
                  group: _DeviceGroup,
                  config) -> None:
         # TODO: create a state field that will tell us the status of the process
+        self._state = UNKNOWN
+
         self.group = group
         self.config = config
 
         self._msg_pipe = multiprocessing.Pipe()
 
         super().__init__(name=group)
+
+    def get_state(self):
+        alive = self.is_alive()  # reports whether the process is alive
+
+        if self._state == UNKNOWN and not alive:
+            # `self.start()` has not been called yet
+            return self._state
+
+        if self._state == UNKNOWN and alive:
+            # We are alive but state is not known means starting up
+            self._state = STARTING
+
+        if self._state == STARTING and self._msg_pipe[1].poll():
+            # if msg pipe will hold the true status
+            msg = self._msg_pipe[1].recv()
+            self._state = msg
+
+        if self._state in [STARTING, RUNNING] and not alive:
+            # we thought it is running, but the process is not alive. Crash condition
+            self._state = FAILED
+            logger.error("Injector process was unexpectedly found stopped")
+
+        return self._state
+
+    def stop_injecting(self):
+        logger.info('Stopping injector for group "%s"', self.group.key)
+        self._msg_pipe[1].send(CLOSE)
+        self._state = STOPPED
 
     def _grab_devices(self):
         sources = []
@@ -98,10 +136,6 @@ class Injector(multiprocessing.Process):
                 loop.stop()
                 return
 
-    def stop_injecting(self):
-        logger.info('Stopping injector for group "%s"', self.group.key)
-        self._msg_pipe[1].send(CLOSE)
-
     def run(self):
         logger.info('Starting injecting the for device "%s"', self.group.key)
 
@@ -110,12 +144,19 @@ class Injector(multiprocessing.Process):
 
         sources = self._grab_devices()
 
+        if len(sources) == 0:
+            logger.error("Did not grab any devices")
+            self._msg_pipe[0].send(NO_DEVICES)
+            return
+
         logger.debug('sources "%s"', sources)
 
         # Eventually will hold all couroutines to read and write input for each input device in group
         couroutines = []
 
         couroutines.append(self._msg_listener())
+
+        self._msg_pipe[0].send(RUNNING)
 
         # try-except block for cleanly catching asyncio cancellation
         try:

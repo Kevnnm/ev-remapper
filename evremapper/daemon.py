@@ -3,13 +3,11 @@
 from pydbus import SystemBus
 from evremapper.logger import logger
 from evremapper.devices import DevGroups
-from evremapper.injector import Injector
+from evremapper.injector import Injector, UNKNOWN
 from evremapper.config import Config
 
-import os
 import time
 import sys
-from multiprocessing import Pipe
 
 import gi
 gi.require_version("GLib", "2.0")
@@ -31,6 +29,10 @@ class Daemon:
                     <method name='stop_inject_device'>
                         <arg type='s' name='device_key' direction='in'/>
                     </method>
+                    <method name='get_state'>
+                        <arg type='s' name='device_key' direction='in'/>
+                        <arg type='i' name='state' direction='out'/>
+                    </method>
                     <method name='inject_device'>
                         <arg type='s' name='device_key' direction='in'/>
                         <arg type='s' name='config' direction='in'/>
@@ -51,6 +53,18 @@ class Daemon:
         logger.debug("Starting daemon")
         loop = GLib.MainLoop()
         loop.run()
+
+    def get_state(self, device_key):
+        logger.info('request device "%s" state', device_key)
+        injector = self.injectors.get(device_key, None)
+
+        if injector is None:
+            logger.debug('injector not found "%s"', device_key)
+            return UNKNOWN
+
+        state = injector.get_state()
+        logger.debug('device state "%s"', state)
+        return state
 
     def publish(self):
         bus = SystemBus()
@@ -100,6 +114,10 @@ class Daemon:
 
         config = Config.from_string(config)
         logger.debug("config to inject: %s", config)
+
+        # Make sure we stop injector for this device, if already running
+        if self.injectors.get(device_key) is not None:
+            self.stop_injecting(device_key)
 
         injector = Injector(inject_group, config)
         injector.start()
