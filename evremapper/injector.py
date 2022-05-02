@@ -4,11 +4,19 @@ import time
 import multiprocessing
 import evdev
 import asyncio
+import sys
+
+from typing import Dict, List
 
 from evremapper.devices import _DeviceGroup
 from evremapper.logger import logger
 from evremapper.config import InputEvent
+from evremapper.input_control import InputControl
 
+CapabilitiesDict = Dict[int, List[int]]
+DeviceSources = List[evdev.InputDevice]
+
+EV_DEVICE_PREFIX = "ev-remapper"
 
 # Messages
 CLOSE = 0
@@ -27,6 +35,14 @@ def is_in_capabilities(event: InputEvent, capabilites_dict):
         return True
 
     return False
+
+
+def udev_name(device_name: str):
+    max_len = 80  # any longer than 80 chars gives an error
+    remaining = max_len - len(EV_DEVICE_PREFIX) - 2  # 1 for the space char
+    suffix = device_name[:remaining]
+    name = f"{EV_DEVICE_PREFIX} {suffix}"
+    return name
 
 
 class Injector(multiprocessing.Process):
@@ -71,7 +87,7 @@ class Injector(multiprocessing.Process):
         self._msg_pipe[1].send(CLOSE)
         self._state = STOPPED
 
-    def _grab_devices(self):
+    def _grab_devices(self) -> DeviceSources:
         sources = []
         for path in self.group.paths:
             input_source = self._grab_device(path)
@@ -80,7 +96,7 @@ class Injector(multiprocessing.Process):
 
         return sources
 
-    def _grab_device(self, device_path):
+    def _grab_device(self, device_path) -> evdev.InputDevice:
         try:
             dev = evdev.InputDevice(device_path)
         except (IOError, OSError):
@@ -136,6 +152,26 @@ class Injector(multiprocessing.Process):
                 loop.stop()
                 return
 
+    def _copy_capabilities(self, input_device: evdev.InputDevice) -> CapabilitiesDict:
+        """Copy capabilities for a new device."""
+        ecodes = evdev.ecodes
+
+        capabilities = input_device.capabilities(absinfo=True)
+
+        # just like what python-evdev does in from_device
+        if ecodes.EV_SYN in capabilities:
+            del capabilities[ecodes.EV_SYN]
+        if ecodes.EV_FF in capabilities:
+            del capabilities[ecodes.EV_FF]
+
+        if ecodes.ABS_VOLUME in capabilities.get(ecodes.EV_ABS, []):
+            # For some reason an ABS_VOLUME capability likes to appear
+            # for some users. It prevents mice from moving around and
+            # keyboards from writing symbols
+            capabilities[ecodes.EV_ABS].remove(ecodes.ABS_VOLUME)
+
+        return capabilities
+
     def run(self):
         logger.info('Starting injecting the for device "%s"', self.group.key)
 
@@ -153,6 +189,36 @@ class Injector(multiprocessing.Process):
 
         # Eventually will hold all couroutines to read and write input for each input device in group
         couroutines = []
+
+        for source in sources:
+            try:
+                # Copy as much info as possible
+                forward_to = evdev.UInput(
+                    name=udev_name(source.name),
+                    events=self._copy_capabilities(source),
+                    vendor=source.info.vendor,
+                    product=source.info.product,
+                    version=source.info.version,
+                    bustype=source.info.bustype,
+                    input_props=source.input_props(),
+                )
+
+                logger.debug("forwarding to uinput %s", forward_to.name)
+            # TODO: Create a KeycodeMapper with async run methods to read events from source
+            # pass them on to forward_to and append it to coroutines to be run in event loop
+
+            except TypeError as e:
+                if "input_props" in str(e):
+                    # UInput constructor doesn't support input_props and
+                    # source.input_props doesn't exist with old python-evdev versions.
+                    logger.error("Please upgrade your python-evdev version. Exiting")
+                    # TODO: send sth on msg pipe?
+                    sys.exit(12)
+
+                raise e
+
+            input_control = InputControl(source, forward_to, self.config)
+            couroutines.append(input_control.run())
 
         couroutines.append(self._msg_listener())
 

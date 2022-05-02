@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from evremapper.logger import logger
 
 
+# TODO: Use this class to hold device configuration information instead of dict
 class Config:
     @classmethod
     def from_string(cls, string: str):
