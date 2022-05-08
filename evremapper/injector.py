@@ -10,8 +10,9 @@ from typing import Dict, List
 
 from evremapper.devices import _DeviceGroup
 from evremapper.logger import logger
-from evremapper.config import InputEvent
+from evremapper.configs.config import InputEvent
 from evremapper.input_control import InputControl
+from evremapper.configs.context import RuntimeContext
 
 CapabilitiesDict = Dict[int, List[int]]
 DeviceSources = List[evdev.InputDevice]
@@ -48,12 +49,12 @@ def udev_name(device_name: str):
 class Injector(multiprocessing.Process):
     def __init__(self,
                  group: _DeviceGroup,
-                 config) -> None:
+                 context: RuntimeContext) -> None:
         # TODO: create a state field that will tell us the status of the process
         self._state = UNKNOWN
 
         self.group = group
-        self.config = config
+        self.context = context
 
         self._msg_pipe = multiprocessing.Pipe()
 
@@ -106,8 +107,9 @@ class Injector(multiprocessing.Process):
         device_capabilities = dev.capabilities(absinfo=False)
 
         grab = False
-        for key in self.config:
-            if is_in_capabilities(key, device_capabilities):
+        for key in self.context.key_to_code:
+            input_event = InputEvent(0, 0, 1, key, 1)
+            if is_in_capabilities(input_event, device_capabilities):
                 grab = True
                 logger.info('grabbing device at "%s" because of event "%s"', device_path, key)
 
@@ -217,7 +219,7 @@ class Injector(multiprocessing.Process):
 
                 raise e
 
-            input_control = InputControl(source, forward_to, self.config)
+            input_control = InputControl(source, forward_to, self.context)
             couroutines.append(input_control.run())
 
         couroutines.append(self._msg_listener())
