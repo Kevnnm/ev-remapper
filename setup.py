@@ -4,10 +4,9 @@ import os
 import glob
 from setuptools import setup
 
+
 def get_packages(base="evremapper"):
-    """Recursively grab all module directories
-    For example 'inputremapper' and 'inputremapper.config'
-    """
+    """Recursively grab all module directories. For example 'evremapper' and 'evremapper.config'"""
     if not os.path.exists(os.path.join(base, "__init__.py")):
         # only python modules
         return []

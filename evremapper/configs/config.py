@@ -28,7 +28,7 @@ class ConfigBase:
         keys = path.copy() if isinstance(path, list) else path.split(".")
 
         if config is None:
-            child = self.config
+            child = self._config
         else:
             child = config
 
@@ -60,7 +60,7 @@ class ConfigBase:
         def callback(parent, child, key):
             return child
 
-        self._resolve(path, callback)
+        return self._resolve(path, callback)
 
     def flush(self):
         """Flushes all configs in memory"""

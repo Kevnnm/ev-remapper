@@ -21,6 +21,7 @@ class InputControl:
             self._source.path,
             self._source.fd,
         )
+
         logger.debug("key_to_code map: %s", self._context.key_to_code)
 
         async for ev in self._source.async_read_loop():
