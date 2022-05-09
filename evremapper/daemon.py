@@ -8,6 +8,7 @@ from evremapper.configs.mappings import Mappings
 from evremapper.configs.context import RuntimeContext
 from evremapper.user import USER
 from evremapper.configs.paths import get_config_path
+from evremapper.configs.global_config import GlobalConfig
 
 import time
 import sys
@@ -26,24 +27,27 @@ class Daemon:
     dbus = f"""
             <node>
                 <interface name='{BUS_NAME}'>
-                    <method name='hello'>
-                        <arg type='s' name='out' direction='in'/>
-                        <arg type='s' name='response' direction='out'/>
-                    </method>
                     <method name='set_config_dir'>
                         <arg type='s' name='config_dir' direction='in'/>
                     </method>
                     <method name='stop_inject_device'>
                         <arg type='s' name='device_key' direction='in'/>
                     </method>
-                    <method name='get_state'>
-                        <arg type='s' name='device_key' direction='in'/>
-                        <arg type='i' name='state' direction='out'/>
-                    </method>
                     <method name='inject_device'>
                         <arg type='s' name='device_key' direction='in'/>
                         <arg type='s' name='config' direction='in'/>
                         <arg type='b' name='status' direction='out'/>
+                    </method>
+                    <method name='autoload'>
+                        <arg type='b' name='status' direction='out'/>
+                    </method>
+                    <method name='get_state'>
+                        <arg type='s' name='device_key' direction='in'/>
+                        <arg type='i' name='state' direction='out'/>
+                    </method>
+                    <method name='hello'>
+                        <arg type='s' name='out' direction='in'/>
+                        <arg type='s' name='response' direction='out'/>
                     </method>
                 </interface>
             </node>
@@ -187,5 +191,33 @@ class Daemon:
         injector = Injector(inject_group, context)
         injector.start()
         self.injectors[inject_group.key] = injector
+
+        return True
+
+    def autoload(self):
+        logger.info('request to autoload devices"')
+
+        if self.config_dir is None:
+            logger.error('user tried to autoload before informing service of config_dir, call set_config_dir')
+            return False
+
+        self.refresh()
+
+        config_path = os.path.join(
+            self.config_dir,
+            "config.json"
+        )
+        global_config = GlobalConfig()
+        global_config.load(config_path)
+
+        autoload = global_config.get("autoload")
+        logger.debug('autoloading: %s', list(autoload.keys()))
+
+        for dev_key in autoload:
+            inject_group = DevGroups.find(key=dev_key)
+            if inject_group is None:
+                logger.info('could not find device to autoload: "%s", skipping', dev_key)
+
+            self.inject_device(dev_key, autoload[dev_key])
 
         return True
