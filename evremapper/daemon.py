@@ -41,6 +41,8 @@ class Daemon:
                     <method name='autoload'>
                         <arg type='b' name='status' direction='out'/>
                     </method>
+                    <method name='stop_all'>
+                    </method>
                     <method name='get_state'>
                         <arg type='s' name='device_key' direction='in'/>
                         <arg type='i' name='state' direction='out'/>
@@ -221,3 +223,9 @@ class Daemon:
             self.inject_device(dev_key, autoload[dev_key])
 
         return True
+
+    def stop_all(self):
+        logger.info('request to stop all injectors')
+
+        for injector_key in self.injectors:
+            self.injectors[injector_key].stop_injecting()
