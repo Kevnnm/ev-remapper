@@ -3,13 +3,21 @@
 from argparse import ArgumentParser
 import os
 import subprocess
+import sys
 
 from evremapper.logger import logger, add_loghandler, logger_verbosity
 from evremapper.configs.global_config import global_config
+from evremapper.user import HOME
 
 
 DAEMON_COMMANDS = set(['autoload', 'stop_all', 'inject_device', 'stop_inject_device', 'autoload_single'])
 CLI_COMMANDS = set(['configure'])
+
+LOG_FILE = (
+    "/var/log/ev-remapper-control.log"
+    if os.access("/var/log", os.W_OK)
+    else f"{HOME}/.log/ev-remapper-control.log"
+)
 
 usage = ""
 
@@ -30,15 +38,22 @@ def communicate_daemon(daemon, options):
 
     def require_device():
         if options.device is None:
+            logger.error("command requires positional argument [device], exiting")
             print("error: command requires positional argument [device]")
             print(usage)
             exit(1)
 
         DevGroups.refresh()
-        group = DevGroups.find(key=options.device)
+
+        if options.device.startswith("/dev"):
+            group = DevGroups.find(path=options.device)
+        else:
+            group = DevGroups.find(key=options.device)
+
         print(group)
 
         if group is None:
+            logger.error('device not found "%s"', options.device)
             print(f'error: device not found "{options.device}"')
             exit(1)
 
@@ -49,24 +64,35 @@ def communicate_daemon(daemon, options):
         logger.error('Daemon missing')
         exit(1)
 
-    # if USER != "root":
-        # TODO: check if options.config_dir is set, if so use that instead
-    config_dir = os.path.dirname(global_config.path)
-    bound_method = getattr(daemon, 'set_config_dir')
-    daemon.set_config_dir(config_dir)
+    # TODO: check if options.config_dir is set, if so use that instead
+    if USER != "root":
+        # We need to have this because udev calls this file as root so it
+        # will change the users current config dir to a directory in the root
+        # home folder
+        config_dir = os.path.dirname(global_config.path)
+        bound_method = getattr(daemon, 'set_config_dir')
+        daemon.set_config_dir(config_dir)
 
     try:
         bound_method = getattr(daemon, options.command)
     except AttributeError:
         # This means we added the options.command into DAEMON_OPTIONS.COMMANDS but did
         # not implement the function inside the Daemon class yet.
+        logger.error('command "%s" is unrecognized by the service', options.command)
         raise ValueError('Command "%s" is unrecognized by the service', options.command)
         exit(1)
+
+    # TODO: change the way we handle these commands
+    # to be handled inside its own if statement. Some
+    # commands require specific logic and grouping them
+    # like this makes it difficult and might require
+    # nesting alot of if statements in the future
 
     if options.command in ['autoload', 'stop_all']:
         bound_method()
     elif options.command == 'inject_device':
         if options.config_selection is None:
+            logger.error("command requires positional arguments [device] and [config_selection], exiting")
             print("error: command requires positional arguments [device] and [config_selection]")
             print(usage)
             exit(1)
@@ -75,6 +101,7 @@ def communicate_daemon(daemon, options):
         bound_method(group.key, options.config_selection)
     elif options.command in ['stop_inject_device', 'autoload_single']:
         group = require_device()
+        # TODO: get rid of this please
         if options.command == 'autoload_single':
             logger.debug("autoloading for %s", group)
 
@@ -82,6 +109,7 @@ def communicate_daemon(daemon, options):
     else:
         # This means we implemented the method on the Daemon class but have not made
         # the necessary changes to reflect that here.
+        logger.error('expected one of %s but got "%s"', DAEMON_COMMANDS, options.command)
         raise AssertionError(f"expected one of {DAEMON_COMMANDS} but got {options.command}")
         exit(1)
 
@@ -132,9 +160,9 @@ def main(options):
     # if options.debug:
     logger_verbosity(True)
 
-    add_loghandler('/var/log/ev-remapper-control.log')
+    add_loghandler(LOG_FILE)
 
-    logger.debug('called for "%s" and "%s"', options.command, options.device)
+    logger.debug('called for "%s"', sys.argv)
 
     from evremapper.user import USER
     boot_finished_ = boot_finished()

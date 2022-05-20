@@ -192,14 +192,14 @@ class _DeviceGroups:
         self._groups = result
 
     def find(self, key=None, path=None):
-        if key is not None:
-            for group in self._groups:
-                if group.key == key:
-                    return group
-        if path is not None:
-            for group in self._groups:
-                if path in group.paths:
-                    return group
+        for group in self._groups:
+            if key and group.key != key:
+                continue
+
+            if path and path not in group.paths:
+                continue
+
+            return group
 
 
 # Global instance for holding all device information
