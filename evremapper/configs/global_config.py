@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from evremapper.configs.config import ConfigBase
+from evremapper.configs.paths import CONFIG_PATH
 from evremapper.logger import logger
 
 from typing import Dict
@@ -12,6 +13,7 @@ class GlobalConfig(ConfigBase):
     """Class for saving and loading mapping config files"""
 
     def __init__(self):
+        self.path = os.path.join(CONFIG_PATH, "config.json")
         self._has_unsaved_changes = False
 
         super().__init__()
@@ -43,3 +45,6 @@ class GlobalConfig(ConfigBase):
 
             for key in json_dict:
                 self.set(key, json_dict[key])
+
+
+global_config = GlobalConfig()

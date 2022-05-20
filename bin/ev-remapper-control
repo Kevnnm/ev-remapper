@@ -1,0 +1,183 @@
+#!/usr/bin/python3
+
+from argparse import ArgumentParser
+import os
+import subprocess
+
+from evremapper.logger import logger, add_loghandler, logger_verbosity
+from evremapper.configs.global_config import global_config
+
+
+DAEMON_COMMANDS = set(['autoload', 'stop_all', 'inject_device', 'stop_inject_device', 'autoload_single'])
+CLI_COMMANDS = set(['configure'])
+
+usage = ""
+
+
+def set_usage(usage_str):
+    global usage
+    usage = usage_str
+
+
+def handle(options):
+    raise NotImplementedError
+
+
+def communicate_daemon(daemon, options):
+    from evremapper.devices import DevGroups
+    from evremapper.user import USER
+    global usage
+
+    def require_device():
+        if options.device is None:
+            print("error: command requires positional argument [device]")
+            print(usage)
+            exit(1)
+
+        DevGroups.refresh()
+        group = DevGroups.find(key=options.device)
+        print(group)
+
+        if group is None:
+            print(f'error: device not found "{options.device}"')
+            exit(1)
+
+        return group
+
+    if daemon is None:
+        # should never happen
+        logger.error('Daemon missing')
+        exit(1)
+
+    # if USER != "root":
+        # TODO: check if options.config_dir is set, if so use that instead
+    config_dir = os.path.dirname(global_config.path)
+    bound_method = getattr(daemon, 'set_config_dir')
+    daemon.set_config_dir(config_dir)
+
+    try:
+        bound_method = getattr(daemon, options.command)
+    except AttributeError:
+        # This means we added the options.command into DAEMON_OPTIONS.COMMANDS but did
+        # not implement the function inside the Daemon class yet.
+        raise ValueError('Command "%s" is unrecognized by the service', options.command)
+        exit(1)
+
+    if options.command in ['autoload', 'stop_all']:
+        bound_method()
+    elif options.command == 'inject_device':
+        if options.config_selection is None:
+            print("error: command requires positional arguments [device] and [config_selection]")
+            print(usage)
+            exit(1)
+        group = require_device()
+
+        bound_method(group.key, options.config_selection)
+    elif options.command in ['stop_inject_device', 'autoload_single']:
+        group = require_device()
+        if options.command == 'autoload_single':
+            logger.debug("autoloading for %s", group)
+
+        bound_method(group.key)
+    else:
+        # This means we implemented the method on the Daemon class but have not made
+        # the necessary changes to reflect that here.
+        raise AssertionError(f"expected one of {DAEMON_COMMANDS} but got {options.command}")
+        exit(1)
+
+
+def _num_logged_in_users():
+    """Check how many users are logged in."""
+    who = subprocess.run(['who'], stdout=subprocess.PIPE).stdout.decode()
+    return len([user for user in who.split('\n') if user.strip() != ""])
+
+
+def _systemd_finished():
+    """Check if systemd finished booting."""
+    try:
+        systemd_analyze = subprocess.run(['systemd-analyze'], stdout=subprocess.PIPE)
+    except FileNotFoundError:
+        # probably not systemd, lets assume true to not block ev-remapper for good
+        # on certain installations
+        return True
+
+    if 'finished' in systemd_analyze.stdout.decode():
+        # it writes into stderr otherwise or something
+        return True
+
+    return False
+
+
+def boot_finished():
+    """Check if booting is completed."""
+    # Get as much information as needed to really safely determine if booting up is complete.
+    # - `who` returns an empty list on some system for security purposes
+    # - something might be broken and might make systemd_analyze fail:
+    #       Bootup is not yet finished (org.freedesktop.systemd1.Manager.FinishTimestampMonotonic=0).
+    #       Please try again later.
+    #       Hint: Use 'systemctl list-jobs' to see active jobs
+    if _systemd_finished():
+        logger.debug('Booting finished')
+        return True
+
+    if _num_logged_in_users() > 0:
+        logger.debug('User(s) logged in')
+        return True
+
+    return False
+
+
+def main(options):
+    # TODO: Add debug option to ev-remapper-service and control
+    # if options.debug:
+    logger_verbosity(True)
+
+    add_loghandler('/var/log/ev-remapper-control.log')
+
+    logger.debug('called for "%s" and "%s"', options.command, options.device)
+
+    from evremapper.user import USER
+    boot_finished_ = boot_finished()
+    is_root = USER == "root"
+    is_autoload = options.command == "autoload" or options.command == "autoload_single"
+    config_dir_set = options.config_dir is not None
+
+    logger.debug('user is "%s"', USER)
+
+    if is_autoload and not boot_finished_ and is_root and not config_dir_set:
+        logger.warning('Skipping autoload command without a logged in user')
+        return
+
+    if options.command in DAEMON_COMMANDS:
+        from evremapper.daemon import Daemon
+
+        daemon = Daemon.connect()
+        communicate_daemon(daemon, options)
+    elif options.command in CLI_COMMANDS:
+        handle(options)
+
+
+if __name__ == '__main__':
+    parser = ArgumentParser()
+    parser.add_argument('command',
+                        choices=list(DAEMON_COMMANDS) + list(CLI_COMMANDS),
+                        help="the command to be run, choose from %(choices)s",
+                        metavar='command')
+    parser.add_argument('device',
+                        nargs="?",
+                        help="device to start/stop injecting")
+    parser.add_argument('config_selection',
+                        nargs="?",
+                        help="name of device config to select")
+    parser.add_argument('--config-dir', action='store', dest='config_dir',
+                        help=(
+                            'path to the config directory containing config.json '
+                            'and the presets folder. '
+                            'defaults to ~/.config/ev-remapper/'
+                        ),
+                        default=None, metavar='CONFIG_DIR',)
+
+    set_usage(parser.format_usage())
+    options = parser.parse_args()
+
+    main(options)

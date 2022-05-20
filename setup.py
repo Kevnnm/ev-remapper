@@ -42,7 +42,9 @@ setup(
         ("/usr/share/polkit-1/actions/", ["data/ev-remapper.policy"]),
         ("/etc/dbus-1/system.d/", ["data/evremapper.Manager.conf"]),
         ("/usr/lib/systemd/system/", ["data/ev-remapper.service"]),
-        ("/usr/bin/", ["bin/ev-remapper-service"]),
+        ("/usr/bin/", ["bin/ev-remapper-service", "bin/ev-remapper-control"]),
+        ("/etc/xdg/autostart/", ["data/ev-remapper-autoload.desktop"]),
+        ("/usr/lib/udev/rules.d/", ["data/99-ev-remapper.rules"])
     ],
     install_requires=["setuptools", "evdev", "pydbus", "pygobject"],
 )

@@ -173,6 +173,16 @@ class _DeviceGroups:
     def __iter__(self):
         return iter(self._groups)
 
+    def __getattribute__(self, key):
+        """To lazy load _groups info when needed."""
+        # Can't use getattr function because we will end up recursively calling this
+        # function permanently
+        if key == "_groups" and object.__getattribute__(self, "_groups") is None:
+            object.__setattr__(self, "_groups", {})
+            object.__getattribute__(self, "refresh")()
+
+        return object.__getattribute__(self, key)
+
     def refresh(self):
         # groups.refresh()
         (r, w) = multiprocessing.Pipe()
@@ -181,10 +191,14 @@ class _DeviceGroups:
         result = r.recv()
         self._groups = result
 
-    def find(self, key=None):
+    def find(self, key=None, path=None):
         if key is not None:
             for group in self._groups:
                 if group.key == key:
+                    return group
+        if path is not None:
+            for group in self._groups:
+                if path in group.paths:
                     return group
 
 
