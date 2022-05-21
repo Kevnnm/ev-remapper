@@ -173,6 +173,16 @@ class _DeviceGroups:
     def __iter__(self):
         return iter(self._groups)
 
+    def __getattribute__(self, key):
+        """To lazy load _groups info when needed."""
+        # Can't use getattr function because we will end up recursively calling this
+        # function permanently
+        if key == "_groups" and object.__getattribute__(self, "_groups") is None:
+            object.__setattr__(self, "_groups", {})
+            object.__getattribute__(self, "refresh")()
+
+        return object.__getattribute__(self, key)
+
     def refresh(self):
         # groups.refresh()
         (r, w) = multiprocessing.Pipe()
@@ -181,11 +191,18 @@ class _DeviceGroups:
         result = r.recv()
         self._groups = result
 
-    def find(self, key=None):
-        if key is not None:
-            for group in self._groups:
-                if group.key == key:
-                    return group
+    def find(self, key=None, path=None, include_evremapper=False):
+        for group in self._groups:
+            if not include_evremapper and group.name.startswith("ev-remapper"):
+                continue
+
+            if key and group.key != key:
+                continue
+
+            if path and path not in group.paths:
+                continue
+
+            return group
 
 
 # Global instance for holding all device information

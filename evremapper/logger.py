@@ -4,10 +4,12 @@ import os
 import logging
 import shutil
 
+from evremapper.user import HOME
+
 LOG_FILE = (
     "/var/log/ev-remapper.log"
     if os.access("/var/log", os.W_OK)
-    else ".log/input_remapper"  # TODO: Detect user and ensure that .log directory is placed in user home
+    else f"{HOME}/.log/ev_remapper.log"
 )
 
 logger = logging.getLogger("ev-remapper")

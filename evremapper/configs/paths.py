@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 import os
 
-from inputremapper.logger import logger
-from inputremapper.user import CONFIG_PATH
+from evremapper.logger import logger
+from evremapper.user import CONFIG_PATH
 
 
 def get_mapping_path(group_name=None, preset=None):
@@ -23,5 +23,5 @@ def get_mapping_path(group_name=None, preset=None):
 
 
 def get_config_path(*paths):
-    """Get a path in ~/.config/input-remapper/"""
+    """Get a path in ~/.config/ev-remapper/"""
     return os.path.join(CONFIG_PATH, *paths)
