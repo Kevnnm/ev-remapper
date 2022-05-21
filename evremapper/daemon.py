@@ -250,7 +250,6 @@ class Daemon:
 
         return True
 
-<<<<<<< variant A
     def autoload_single(self, device_key):
         logger.info('request to autoload device "%s"', device_key)
 
@@ -291,8 +290,6 @@ class Daemon:
 
         return True
 
->>>>>>> variant B
-======= end
     def autoload(self):
         logger.info('request to autoload devices')
 
