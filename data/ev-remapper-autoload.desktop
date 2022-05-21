@@ -1,5 +1,5 @@
 [Desktop Entry]
 Type=Application
-Exec=bash -c "ev-remapper-control stop-all && ev-remapper-control autoload"
+Exec=bash -c "ev-remapper-control stop_all && ev-remapper-control autoload"
 Name=ev-remapper-autoload
 Comment=Starts injecting all devices that are set to automatically load for the user

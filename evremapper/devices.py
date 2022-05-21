@@ -191,8 +191,11 @@ class _DeviceGroups:
         result = r.recv()
         self._groups = result
 
-    def find(self, key=None, path=None):
+    def find(self, key=None, path=None, include_evremapper=False):
         for group in self._groups:
+            if not include_evremapper and group.name.startswith("ev-remapper"):
+                continue
+
             if key and group.key != key:
                 continue
 

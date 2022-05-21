@@ -12,6 +12,7 @@ from evremapper.user import HOME
 
 DAEMON_COMMANDS = set(['autoload', 'stop_all', 'inject_device', 'stop_inject_device', 'autoload_single'])
 CLI_COMMANDS = set(['configure'])
+INTERNALS = set(['start-daemon'])
 
 LOG_FILE = (
     "/var/log/ev-remapper-control.log"
@@ -29,6 +30,17 @@ def set_usage(usage_str):
 
 def handle(options):
     raise NotImplementedError
+
+
+def internals(options):
+    if options.command == 'start-daemon':
+        cmd = 'input-remapper-service'
+    else:
+        return
+
+    # daemonize
+    cmd = f'{cmd} &'
+    os.system(cmd)
 
 
 def communicate_daemon(daemon, options):
@@ -89,6 +101,8 @@ def communicate_daemon(daemon, options):
     # nesting alot of if statements in the future
 
     if options.command in ['autoload', 'stop_all']:
+        if options.command == "autoload":
+            bound_method(timeout=10)
         bound_method()
     elif options.command == 'inject_device':
         if options.config_selection is None:
@@ -179,16 +193,18 @@ def main(options):
     if options.command in DAEMON_COMMANDS:
         from evremapper.daemon import Daemon
 
-        daemon = Daemon.connect()
+        daemon = Daemon.connect(fallback=False)
         communicate_daemon(daemon, options)
     elif options.command in CLI_COMMANDS:
         handle(options)
+    elif options.command in INTERNALS:
+        internals(options)
 
 
 if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('command',
-                        choices=list(DAEMON_COMMANDS) + list(CLI_COMMANDS),
+                        choices=list(DAEMON_COMMANDS) + list(CLI_COMMANDS) + list(INTERNALS),
                         help="the command to be run, choose from %(choices)s",
                         metavar='command')
     parser.add_argument('device',
