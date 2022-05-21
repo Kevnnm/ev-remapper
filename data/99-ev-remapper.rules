@@ -7,4 +7,4 @@
 #   journalctl -f
 # to get available variables:
 #   udevadm monitor --environment --udev --subsystem input
-ACTION=="add", SUBSYSTEM=="input", RUN+="/bin/ev-remapper-control autoload_single $env{DEVNAME}"
+ACTION=="add", SUBSYSTEM=="input", RUN+="/bin/ev-remapper-control autoload-single $env{DEVNAME}"

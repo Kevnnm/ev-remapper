@@ -9,10 +9,17 @@ from evremapper.logger import logger, add_loghandler, logger_verbosity
 from evremapper.configs.global_config import global_config
 from evremapper.user import HOME
 
+AUTOLOAD = 'autoload'
+STOP_ALL = 'stop-all'
+AUTOLOAD_SINGLE = 'autoload-single'
+INJECT_DEVICE = 'inject'
+STOP_INJECT_DEVICE = 'stop-injecting'
 
-DAEMON_COMMANDS = set(['autoload', 'stop_all', 'inject_device', 'stop_inject_device', 'autoload_single'])
+START_DAEMON = 'start-daemon'
+
+DAEMON_COMMANDS = set([AUTOLOAD, AUTOLOAD_SINGLE, STOP_ALL, INJECT_DEVICE, STOP_INJECT_DEVICE])
 CLI_COMMANDS = set(['configure'])
-INTERNALS = set(['start-daemon'])
+INTERNALS = set([START_DAEMON])
 
 LOG_FILE = (
     "/var/log/ev-remapper-control.log"
@@ -28,13 +35,14 @@ def set_usage(usage_str):
     usage = usage_str
 
 
-def handle(options):
+def cli(options):
     raise NotImplementedError
 
 
 def internals(options):
-    if options.command == 'start-daemon':
-        cmd = 'input-remapper-service'
+    # TODO: fix this in daemon.py
+    if options.command == START_DAEMON:
+        cmd = 'ev-remapper-service'
     else:
         return
 
@@ -50,7 +58,7 @@ def communicate_daemon(daemon, options):
 
     def require_device():
         if options.device is None:
-            logger.error("command requires positional argument [device], exiting")
+            logger.error('command "%s" requires positional argument [device], exiting', options.command)
             print("error: command requires positional argument [device]")
             print(usage)
             exit(1)
@@ -82,50 +90,26 @@ def communicate_daemon(daemon, options):
         # will change the users current config dir to a directory in the root
         # home folder
         config_dir = os.path.dirname(global_config.path)
-        bound_method = getattr(daemon, 'set_config_dir')
         daemon.set_config_dir(config_dir)
 
-    try:
-        bound_method = getattr(daemon, options.command)
-    except AttributeError:
-        # This means we added the options.command into DAEMON_OPTIONS.COMMANDS but did
-        # not implement the function inside the Daemon class yet.
-        logger.error('command "%s" is unrecognized by the service', options.command)
-        raise ValueError('Command "%s" is unrecognized by the service', options.command)
-        exit(1)
+    if options.command == AUTOLOAD:
+        daemon.autoload(timeout=10)
+    elif options.command == AUTOLOAD_SINGLE:
+        group = require_device()
+        daemon.autoload_single(group.key)
+    elif options.command == STOP_ALL:
+        daemon.stop_all()
+    elif options.command == INJECT_DEVICE:
+        group = require_device()
 
-    # TODO: change the way we handle these commands
-    # to be handled inside its own if statement. Some
-    # commands require specific logic and grouping them
-    # like this makes it difficult and might require
-    # nesting alot of if statements in the future
-
-    if options.command in ['autoload', 'stop_all']:
-        if options.command == "autoload":
-            bound_method(timeout=10)
-        bound_method()
-    elif options.command == 'inject_device':
         if options.config_selection is None:
-            logger.error("command requires positional arguments [device] and [config_selection], exiting")
-            print("error: command requires positional arguments [device] and [config_selection]")
-            print(usage)
-            exit(1)
+            daemon.autoload_single(group.key)
+        else:
+            daemon.inject_device(group.key, options.config_selection)
+    elif options.command == STOP_INJECT_DEVICE:
         group = require_device()
 
-        bound_method(group.key, options.config_selection)
-    elif options.command in ['stop_inject_device', 'autoload_single']:
-        group = require_device()
-        # TODO: get rid of this please
-        if options.command == 'autoload_single':
-            logger.debug("autoloading for %s", group)
-
-        bound_method(group.key)
-    else:
-        # This means we implemented the method on the Daemon class but have not made
-        # the necessary changes to reflect that here.
-        logger.error('expected one of %s but got "%s"', DAEMON_COMMANDS, options.command)
-        raise AssertionError(f"expected one of {DAEMON_COMMANDS} but got {options.command}")
-        exit(1)
+        daemon.stop_inject_device(group.key)
 
 
 def _num_logged_in_users():
@@ -196,7 +180,7 @@ def main(options):
         daemon = Daemon.connect(fallback=False)
         communicate_daemon(daemon, options)
     elif options.command in CLI_COMMANDS:
-        handle(options)
+        cli(options)
     elif options.command in INTERNALS:
         internals(options)
 
@@ -209,7 +193,8 @@ if __name__ == '__main__':
                         metavar='command')
     parser.add_argument('device',
                         nargs="?",
-                        help="device to start/stop injecting")
+                        help="device to start/stop injecting",
+                        default=None)
     parser.add_argument('config_selection',
                         nargs="?",
                         help="name of device config to select")
