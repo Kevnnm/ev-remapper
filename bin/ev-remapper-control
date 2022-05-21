@@ -201,7 +201,7 @@ if __name__ == '__main__':
     parser.add_argument('--config-dir', action='store', dest='config_dir',
                         help=(
                             'path to the config directory containing config.json '
-                            'and the presets folder. '
+                            'and the mappings folder. '
                             'defaults to ~/.config/ev-remapper/'
                         ),
                         default=None, metavar='CONFIG_DIR',)
