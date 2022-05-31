@@ -33,6 +33,11 @@ if not hasattr(evdev.InputDevice, "path"):
     evdev.InputDevice.path = path
 
 
+def read_key(device: evdev.InputDevice):
+    input_event = device.read_one()
+    return input_event.code
+
+
 def _is_keyboard_dev(capabilities) -> bool:
     if KEY_A in capabilities.get(EV_KEY, []):
         return True
@@ -82,6 +87,28 @@ class _DeviceGroup:
         self.types = types
 
         self.name: str = sorted(names, key=len)[0]
+
+    def read_one(self):
+        sources = []
+        for device_path in self.paths:
+            try:
+                dev = evdev.InputDevice(device_path)
+                sources.append(dev)
+            except (IOError, OSError):
+                logger.error('could not find device at "%s"', device_path)
+
+        received = False
+        while True:
+            for dev in sources:
+                event = dev.read_one()
+                if event is not None and event.type == evdev.ecodes.EV_KEY:
+                    received = True
+                    break
+            if received:
+                break
+
+        code_tuple = evdev.resolve_ecodes(evdev.ecodes.KEY, [event.code])[0]
+        return code_tuple
 
     def dumps(self):
         """Return a string representing this object."""

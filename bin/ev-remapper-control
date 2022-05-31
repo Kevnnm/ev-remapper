@@ -8,6 +8,7 @@ import sys
 from evremapper.logger import logger, add_loghandler, logger_verbosity
 from evremapper.configs.global_config import global_config
 from evremapper.user import HOME
+from evremapper.injector import STARTING, RUNNING
 
 AUTOLOAD = 'autoload'
 STOP_ALL = 'stop-all'
@@ -15,10 +16,12 @@ AUTOLOAD_SINGLE = 'autoload-single'
 INJECT_DEVICE = 'inject'
 STOP_INJECT_DEVICE = 'stop-injecting'
 
+CONFIGURE = 'configure'
+
 START_DAEMON = 'start-daemon'
 
 DAEMON_COMMANDS = set([AUTOLOAD, AUTOLOAD_SINGLE, STOP_ALL, INJECT_DEVICE, STOP_INJECT_DEVICE])
-CLI_COMMANDS = set(['configure'])
+CLI_COMMANDS = set([CONFIGURE])
 INTERNALS = set([START_DAEMON])
 
 LOG_FILE = (
@@ -36,7 +39,70 @@ def set_usage(usage_str):
 
 
 def cli(options):
-    raise NotImplementedError
+    from evremapper.devices import DevGroups, read_key
+    from evremapper.daemon import Daemon
+
+    def get_device():
+        DevGroups.refresh()
+
+        if options.device.startswith("/dev"):
+            group = DevGroups.find(path=options.device)
+        else:
+            group = DevGroups.find(key=options.device)
+
+        print(group)
+
+        if group is None:
+            logger.error('device not found "%s"', options.device)
+            print(f'error: device not found "{options.device}, try running as super user"')
+            exit(1)
+
+        return group
+
+    if options.command == CONFIGURE:
+        if os.geteuid() != 0:
+            print("warning: this command normally requires root permission for finding devices")
+
+        if options.device is not None:
+            device = get_device()
+        else:
+            print("Select a device to configure:")
+
+            devices = []
+            count = 1
+            for device in DevGroups:
+                if device.key.startswith("ev-remapper"):
+                    continue
+                print(f"{count}.{device.key}")
+                count += 1
+                devices.append(device)
+
+            print(f"[1-{count - 1}]: ", end="")
+            while True:
+                try:
+                    selection = int(input())
+                except ValueError:
+                    print("try again...")
+                    continue
+
+                if 1 <= selection <= count:
+                    break
+
+            device = devices[selection - 1]
+
+        daemon = Daemon.connect(fallback=False)
+        if daemon is not None:
+            state = daemon.get_state(device.key)
+
+            if state in [RUNNING, STARTING]:
+                print("error: injector for device is runing, please stop it first.")
+                print("exiting.")
+                exit(1)
+
+        print(f'Configuring for device: "{device.key}"')
+        print('Press the key you want to remap: ')
+        key_code = device.read_one()
+        print(f'received: "{key_code}"')
 
 
 def internals(options):
@@ -74,14 +140,14 @@ def communicate_daemon(daemon, options):
 
         if group is None:
             logger.error('device not found "%s"', options.device)
-            print(f'error: device not found "{options.device}"')
+            print(f'error: device not found "{options.device}, try running as super user"')
             exit(1)
 
         return group
 
     if daemon is None:
-        # should never happen
         logger.error('Daemon missing')
+        print("error: daemon not found (are you sure the service is started?)")
         exit(1)
 
     # TODO: check if options.config_dir is set, if so use that instead

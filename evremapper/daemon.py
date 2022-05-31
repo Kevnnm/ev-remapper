@@ -77,7 +77,7 @@ class Daemon:
         self.refreshed_devices_at = 0
 
     @classmethod
-    def connect(cls, fallback=True):
+    def connect(cls, fallback=False):
         """Try to connect to a running daemon, if not running then start one"""
         try:
             system_bus = SystemBus()
@@ -88,8 +88,6 @@ class Daemon:
             if not fallback:
                 logger.error("Service not running? %s", error)
                 return None
-
-            return None  # TODO: fix autostart feature
 
             logger.info("Starting the service")
             # Blocks until pkexec is done asking for the password.

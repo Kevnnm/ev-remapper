@@ -35,8 +35,7 @@ setup(
     license="MIT",
     packages=get_packages(),
     include_package_data=True,
-    # TODO: setup udev rules to autoload when devices are input devices are plugged in
-    # TODO: dbus-1/system.d configurations for when ipc is implemented
+    # TODO: bash_completions in /usr/share/bash-completion/completions
     data_files=[
         ("/usr/share/ev-remapper/", glob.glob("data/*")),
         ("/usr/share/polkit-1/actions/", ["data/ev-remapper.policy"]),
